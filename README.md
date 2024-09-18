@@ -8,4 +8,4 @@ To compile on linux gcc, linking the math library is required:
 
 # Demonstration
 
-![animation](https://github.com/zmckevitt/tennis/blob/master/animation.gif)
+<img src="https://github.com/zmckevitt/tennis/blob/master/animation.gif"  width="35%">

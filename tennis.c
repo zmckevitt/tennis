@@ -9,9 +9,8 @@
 
 void sigint_handler(int signum) {
     // move down height lines
-    printf("\x1b[%dB", HEIGHT);
-    // reenable the cursor
-    enable_cursor();
+    CURSOR_DOWN(HEIGHT);
+    ENABLE_CURSOR;
     fflush(stdout);
     exit(1);
 }
@@ -115,28 +114,25 @@ void generate_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
 
 void render_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
     for(int y=0; y<HEIGHT; y++) {
-        printf("\x1b[48;5;28m");
+        BG_COLOR(GREEN);
         for(int x=0; x<WIDTH; x++) {
             if(x == ball.pos.x && y == ball.pos.y) {
                 // 256 bit colors
-                printf("\x1b[38;5;220m");
+                FG_COLOR(YELLOW);
                 fputc((*frame)[x][y], stdout);
-                printf("\x1b[0m");
-                printf("\x1b[48;5;28m");
+                RESET_COLOR;
+                BG_COLOR(GREEN);
             // make player background white with colored "racket"
             } else if (x == guy1.pos.x && y == guy1.pos.y) {
-                printf("\x1b[38;5;196m");
-                printf("\x1b[48;5;255m");
+                FG_BG_COLOR(RED, WHITE);
                 fputc((*frame)[x][y], stdout);
-                printf("\x1b[0m");
-                printf("\x1b[48;5;28m");
+                RESET_COLOR;
+                BG_COLOR(GREEN);
             } else if (x == guy2.pos.x && y == guy2.pos.y) {
-                printf("\x1b[38;5;27m");
-                printf("\x1b[48;5;255m");
+                FG_BG_COLOR(BLUE, WHITE);
                 fputc((*frame)[x][y], stdout);
-                printf("\x1b[0m");
-                printf("\x1b[48;5;28m");
-
+                RESET_COLOR;
+                BG_COLOR(GREEN);
             } else {
                 fputc((*frame)[x][y], stdout);
             }
@@ -153,7 +149,7 @@ int main(int argc, char** argv) {
     newaction.sa_handler = sigint_handler;
     sigaction(SIGINT, &newaction, NULL);
 
-    disable_cursor();
+    DISABLE_CURSOR; 
 
     Frame frame;
     
@@ -203,7 +199,7 @@ int main(int argc, char** argv) {
         }
         generate_frame(ball, guy1, guy2, &frame);
         render_frame(ball, guy1, guy2, &frame);
-        reset_cursor();
+        CURSOR_TOP; 
         usleep(1000 * 1000 / FPS);
     }
     return 0;

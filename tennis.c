@@ -1,191 +1,115 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <unistd.h>
+#include <signal.h>
 
-//////////////////////////////////////////////////////////////
-//
-// MATH
-//
-//////////////////////////////////////////////////////////////
+#include "console.h"
+#include "linalg.h"
 
-struct vec {
-    double x;
-    double y;
-};
-
-// Do we need a constructor?
-struct vec init_vec(float x, float y) {
-    struct vec v;
-    v.x = x;
-    v.y = y;
-
-    return v;
+void sigint_handler(int signum) {
+    // move down height lines
+    printf("\x1b[%dB", HEIGHT);
+    enable_cursor();
+    fflush(stdout);
+    exit(1);
 }
 
-struct vec vec_sum(struct vec v1, struct vec v2) {
-    struct vec v;
+// TODO: find way to make this dynamic
+typedef struct Frame {
+    size_t width;
+    size_t height;
+    char buf[WIDTH][HEIGHT];
+} Frame;
 
-    v.x = v1.x + v2.x;
-    v.y = v1.y + v2.y;
-
-    return v;
-}
-
-double vec_length(struct vec v) {
-    return sqrt(v.x*v.x + v.y*v.y);
-}
-
-struct vec flip_x(struct vec v) {
-    struct vec tmp;
-
-    tmp.x = -1 * v.x;
-    tmp.y = v.y;
-
-    return tmp;
-}
-
-struct vec flip_y(struct vec v) {
-    struct vec tmp;
-
-    tmp.x = v.x;
-    tmp.y = -1 * v.y;
-
-    return tmp;
-}
-
-struct vec flip(struct vec v) {
-    struct vec tmp;
-
-    tmp.x = -1 * v.x;
-    tmp.y = -1 * v.y;
-
-    return tmp;
-}
-
-struct vec v_diff(struct vec v1, struct vec v2) {
-    struct vec tmp;
-
-    tmp.x = v2.x - v1.x;
-    tmp.y = v2.y - v1.y;
-
-    return tmp;
-}
-
-struct vec scale(struct vec v, float sf) {
-    struct vec tmp;
-
-    tmp.x = v.x * sf;
-    tmp.y = v.y * sf;
-
-    return tmp;
-}
-
-// Implement after getting floating point vectors working....
-struct vec norm(struct vec v) {
-    struct vec tmp;
-
-    tmp.x = ceil(v.x / vec_length(v));
-    tmp.y = ceil(v.y / vec_length(v));
-
-    // tmp.x = (int) tmp.x;
-    // tmp.y = (int) tmp.y;
-
-    return tmp;
-}
-
-// Transform function?
-
-//////////////////////////////////////////////////////////////
-//
-// Graphics
-//
-//////////////////////////////////////////////////////////////
-
-#define HEIGHT 40
-#define WIDTH 64
-#define FPS 20
-
-
-// returns cursor to starting position
-static void back(void)
-{
-    printf("\x1b[%dD", WIDTH);
-    printf("\x1b[%dA", HEIGHT);
+Frame init_frame() {
+    Frame frame = {
+        .width = WIDTH,
+        .height = HEIGHT,
+    };
+    return frame;
 }
 
 // draws picture with character at position
-void draw(struct vec pos, int last1, int last2, int height, struct vec guy1, struct vec guy2) {
+int generate_frame(struct vec pos, int last1, int last2, int ballheight, struct vec guy1, struct vec guy2, Frame *frame) {
 
-    char row[WIDTH];
+    size_t width = frame->width;
+    size_t height = frame->height;
 
     int posx = (int)pos.x;
     int posy = (int)pos.y;
 
-    int scalex = WIDTH/8;
+    int scalex = width/8;
     int quit = 0;
-    for(int y=0; y<HEIGHT; ++y) {
-        for(int x=0; x<WIDTH; ++x) {
-            if(x == 0 || y == 0 || x == WIDTH - 1 || y == HEIGHT -1) {
-                row[x] = '#';
+    for(int y=0; y<height; ++y) {
+        for(int x=0; x<width; ++x) {
+            if(x == 0 || y == 0 || x == width - 1 || y == height -1) {
+                frame->buf[x][y] = '#';
             }
-            else if(y==HEIGHT/2) {
-                row[x] = '=';
+            else if(y==height/2) {
+                frame->buf[x][y] = '=';
             }
-            else if ((x == WIDTH/2 - 1 || x == WIDTH/2) && (y > HEIGHT/2 - HEIGHT/4 && y < HEIGHT/2 + HEIGHT/4)) {
-                row[x] = '|';
+            else if ((x == width/2 - 1 || x == width/2) && (y > height/2 - height/4 && y < height/2 + height/4)) {
+                frame->buf[x][y] = '|';
             }
-            else if (x == scalex || x == WIDTH - scalex -1) {
-                row[x] = '|';
+            else if (x == scalex || x == width - scalex -1) {
+                frame->buf[x][y] = '|';
             }
-            else if ((y == HEIGHT/2 - HEIGHT/4 || y == HEIGHT/2 + HEIGHT/4) && (x < WIDTH - scalex -1 && x > scalex)) {
-                row[x] = '-';
+            else if ((y == height/2 - height/4 || y == height/2 + height/4) && (x < width - scalex -1 && x > scalex)) {
+                frame->buf[x][y] = '-';
             }
             else {
-                row[x] = ' ';
+                frame->buf[x][y] = ' ';
             }
             if(posx == x && posy == y) {
-                if(posx < scalex || posx > WIDTH-scalex-1) {
-                    row[x] = 'X';
+                if(posx < scalex || posx > width-scalex-1) {
+                    frame->buf[x][y] = 'X';
                 }
                 else {
-                    if(height == 0) {
-                        row[x] = '.';
+                    if(ballheight == 0) {
+                        frame->buf[x][y] = '.';
                     }
-                    else if (height == 1) {
-                        row[x] = '*';
+                    else if (ballheight == 1) {
+                        frame->buf[x][y] = '*';
                     }
                     else {
-                        row[x] = '@';
+                        frame->buf[x][y] = '@';
                     }
                 }
             }
             if(guy1.x == x && guy1.y == y) {
                 if(last1){
-                    row[x] = '\\';
+                    frame->buf[x][y] = '\\';
                 }
                 else {
-                    row[x] = '/';
+                    frame->buf[x][y] = '/';
                 }
             }
             if(guy2.x == x && guy2.y == y) {
                 if(last2) {
-                    row[x] = '/';
+                    frame->buf[x][y] = '/';
                 }
                 else {
-                    row[x] = '\\';
+                    frame->buf[x][y] = '\\';
                 }
             }
         }
-        fwrite(row, WIDTH, 1, stdout);
-        fputc('\n', stdout);
-        
     }
+    return 0;
+}
 
+void render_frame(Frame *frame) {
+    for(int y=0; y<frame->height; y++) {
+        char row[frame->width];
+        for(int x=0; x<frame->width; x++) {
+            // fputc(frame->buf[x][y], stdout);
+            row[x] = frame->buf[x][y];
+        }
+        fwrite(row, frame->width, 1, stdout);
+        fputc('\n', stdout);
+    }
 }
 
 // Ideas:
-//  Add DEPTH to ball. Increase in ASCII from low light to high light . -> @
 //  Movable characters
 //  Extend graphics terminal to the right for text ourputs 
 
@@ -193,6 +117,16 @@ void draw(struct vec pos, int last1, int last2, int height, struct vec guy1, str
 //  Make draw() args into a struct 
 //  Implement floating point vectors
 int main(int argc, char** argv) {
+
+    // Disable cursor and reenable on exit
+    struct sigaction newaction;
+    newaction.sa_handler = sigint_handler;
+    sigaction(SIGINT, &newaction, NULL);
+
+    disable_cursor();
+
+    // TODO: make input frame dependent on console size
+    Frame frame = init_frame();
 
     struct vec guy1;
     struct vec guy2;
@@ -246,8 +180,9 @@ int main(int argc, char** argv) {
         if(pos.y >= HEIGHT-1 || pos.y <= 1) {
             vel = flip_y(vel);
         }
-        draw(pos, last1, last2, height, guy1, guy2);
-        back();
+        generate_frame(pos, last1, last2, height, guy1, guy2, &frame);
+        render_frame(&frame);
+        reset_cursor();
         usleep(1000 * 1000 / FPS);
     }
     return 0;

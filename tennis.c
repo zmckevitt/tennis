@@ -27,6 +27,23 @@ typedef struct GameObj {
     char c;
 } GameObj;
 
+GameObj init_gameobj(Vec pos, Vec vel, char c) {
+    GameObj gameobj = {
+        .pos = pos,
+        .vel = vel,
+        .c = c
+    };
+    return gameobj;
+}
+
+// returns 1 if obj2 is within x radius of obj1 
+// returns 0 otherwise
+int collision(GameObj obj1, GameObj obj2, int radius) {
+
+    return (obj2.pos.x >= obj1.pos.x - radius && obj2.pos.x <= obj1.pos.x + radius)
+            && obj2.pos.y == obj1.pos.y;
+}
+
 typedef struct GameState {
     GameObj guy1;
     GameObj guy2;
@@ -66,92 +83,70 @@ void draw_field(Frame* frame) {
 }
 
 // draws picture with character at position
-void generate_frame(Vec ball, int last1, int last2, int ballheight, Vec guy1, Vec guy2, Frame *frame) {
+void generate_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
     size_t width = WIDTH;
     size_t height = HEIGHT;
 
-    int ballx = (int)ball.x;
-    int bally = (int)ball.y;
+    int ballx = (int)ball.pos.x;
+    int bally = (int)ball.pos.y;
+    int ballz = (int)ball.pos.z; // ( ͡° ͜ʖ ͡°)
 
-    int guy1x = (int)guy1.x;
-    int guy1y = (int)guy1.y;
+    int guy1x = (int)guy1.pos.x;
+    int guy1y = (int)guy1.pos.y;
     
-    int guy2x = (int)guy2.x;
-    int guy2y = (int)guy2.y;
+    int guy2x = (int)guy2.pos.x;
+    int guy2y = (int)guy2.pos.y;
 
     draw_field(frame);
 
-    if(ballheight == 0) {
+    if(ballz == 0) {
         (*frame)[ballx][bally] = '.';
     }
-    else if (ballheight == 1) {
+    else if (ballz == 1) {
         (*frame)[ballx][bally] = '*';
     }
     else {
         (*frame)[ballx][bally] = '@';
     }
 
-    // legacy, redo this somehow
-    if(last1) {
-        (*frame)[guy1x][guy1y] = '\\';
-    } else {
-        (*frame)[guy1x][guy1y] = '/';
-    }
-    if(last2) {
-        (*frame)[guy2x][guy2y] = '/';
-    }
-    else {
-        (*frame)[guy2x][guy2y] = '\\';
-    }
+    (*frame)[guy1x][guy1y] = guy1.c;
+    (*frame)[guy2x][guy2y] = guy2.c;
 }
 
-void render_frame(Frame *frame) {
+void render_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
     for(int y=0; y<HEIGHT; y++) {
-        char row[WIDTH];
-        // 16 bit color
-        // printf("\x1b[42m");
-        // 256 bit color
         printf("\x1b[48;5;28m");
         for(int x=0; x<WIDTH; x++) {
-            // TODO: put this into GameState
-            // if(x == frame->ball.x && y == frame->ball.y) {
-            //     // 256 bit colors
-            //     printf("\x1b[38;5;220m");
-            //     fputc(frame[x][y], stdout);
-            //     printf("\x1b[0m");
-            //     printf("\x1b[48;5;28m");
-            // // make player background white with black "racket"
-            // } else if (x == frame->guy1.x && y == frame->guy1.y) {
-            //     printf("\x1b[38;5;196m");
-            //     printf("\x1b[48;5;255m");
-            //     fputc(frame[x][y], stdout);
-            //     printf("\x1b[0m");
-            //     printf("\x1b[48;5;28m");
-            // } else if (x == frame->guy2.x && y == frame->guy2.y) {
-            //     printf("\x1b[38;5;27m");
-            //     printf("\x1b[48;5;255m");
-            //     fputc(frame[x][y], stdout);
-            //     printf("\x1b[0m");
-            //     printf("\x1b[48;5;28m");
+            if(x == ball.pos.x && y == ball.pos.y) {
+                // 256 bit colors
+                printf("\x1b[38;5;220m");
+                fputc((*frame)[x][y], stdout);
+                printf("\x1b[0m");
+                printf("\x1b[48;5;28m");
+            // make player background white with colored "racket"
+            } else if (x == guy1.pos.x && y == guy1.pos.y) {
+                printf("\x1b[38;5;196m");
+                printf("\x1b[48;5;255m");
+                fputc((*frame)[x][y], stdout);
+                printf("\x1b[0m");
+                printf("\x1b[48;5;28m");
+            } else if (x == guy2.pos.x && y == guy2.pos.y) {
+                printf("\x1b[38;5;27m");
+                printf("\x1b[48;5;255m");
+                fputc((*frame)[x][y], stdout);
+                printf("\x1b[0m");
+                printf("\x1b[48;5;28m");
 
-            // } else {
-            //     fputc(frame[x][y], stdout);
-            // }
-            //row[x] = frame[x][y];
-            fputc((*frame)[x][y], stdout);
+            } else {
+                fputc((*frame)[x][y], stdout);
+            }
         }
-        //fwrite(row, WIDTH, 1, stdout);
         printf("\x1b[0m");
         fputc('\n', stdout);
     }
-    // If we disable flushing on newlines
-    // fflush(stdout);
 }
 
 int main(int argc, char** argv) {
-    // Dont flush stdout every newline
-    // https://stackoverflow.com/questions/40227807/how-can-i-print-a-string-with-newline-without-flushing-the-buffer
-    // setvbuf(stdout, NULL, _IOFBF, 0);
 
     // Disable cursor and reenable on exit
     struct sigaction newaction;
@@ -160,64 +155,54 @@ int main(int argc, char** argv) {
 
     disable_cursor();
 
-    // TODO: make input frame dependent on console size
-    // Frame frame = init_frame();
     Frame frame;
+    
+    // Guys dont have velocity yet
+    int x = 15;
+    int y = 4;
+    GameObj guy1 = init_gameobj(init_vec(x,y,0), init_vec(0,0,0), '/');
+    GameObj guy2 = init_gameobj(init_vec(WIDTH-x-1, HEIGHT-y-1,0), init_vec(0,0,0), '\\');
 
-    Vec guy1;
-    Vec guy2;
+    // Vector from guy1 to guy2
+    Vec diff = v_diff(guy1.pos, guy2.pos);
 
-    int x, y;
-    if(argc < 3) {
-        x = 15;
-        y = 4;
-    }
-    else {
-        x = atoi(argv[1]);
-        y = atoi(argv[2]);
-    }
-    guy1 = init_vec(x,y);
-    guy2 = init_vec(WIDTH - x - 1, HEIGHT - y -1);
-    if(argc == 5){
-        guy2 = init_vec(atoi(argv[3]), atoi(argv[4]));
-    }
-    Vec diff = v_diff(guy1, guy2);
+    // Start ball with guy1
+    // Initial velocity is normalized in the direction of guy2
+    GameObj ball = init_gameobj(guy1.pos, norm(diff), '.');
 
-    // give guy1 the ball first
-    Vec pos = guy1;
-
-    // choose velocity pointing to guy2
-    Vec vel = norm(diff);//init_vec(1,1);
-    // vel.x+=0.75;
-
-    int last1 = 1;
-    int last2 = 1;
-    int height = 0;
     while(1) {
-        pos = vec_sum(pos, vel);
-        if(pos.y < diff.y/6 + y|| (pos.y < diff.y + y && pos.y >= (5 * diff.y / 6) + y)){
-            height = 0;
+        ball.pos = vec_sum(ball.pos, ball.vel);
+        if(ball.pos.y < diff.y/6 + y || (ball.pos.y < diff.y + y && ball.pos.y >= (5 * diff.y / 6) + y)){
+            ball.pos.z = 0;
         }
-        if((pos.y < 2* diff.y/6 + y && pos.y >= diff.y/6 + y) || (pos.y >= 4 * diff.y/6 + y && pos.y < 5*diff.y/6 + y ) ) {
-            height = 1;
+        if((ball.pos.y < 2* diff.y/6 + y && ball.pos.y >= diff.y/6 + y) || 
+           (ball.pos.y >= 4 * diff.y/6 + y && ball.pos.y < 5*diff.y/6 + y )) {
+            ball.pos.z = 1;
         }
-        if(pos.y < 4*diff.y/6 + y && pos.y >= 3*diff.y/6 + y) {
-            height = 2;
+        if(ball.pos.y < 4*diff.y/6 + y && ball.pos.y >= 3*diff.y/6 + y) {
+            ball.pos.z = 2;
         }
-        if(((pos.x >= guy1.x - 2 && pos.x <= guy1.x + 2) && pos.y == guy1.y)
-            || ((pos.x <= guy2.x + 2 && pos.x >= guy2.x - 2) && pos.y == guy2.y)) {
-            vel = flip(vel);
-            last1 = !last1;
-            last2 = !last2;
+        if(collision(guy1, ball, 2) || collision(guy2, ball, 2)) {
+            ball.vel = flip_xy(ball.vel);
+            if(guy1.c == '/') {
+                guy1.c = '\\';
+            } else {
+                guy1.c = '/';
+            }
+            if(guy2.c == '/') {
+                guy2.c = '\\';
+            } else {
+                guy2.c = '/';
+            }
         }
-        if(pos.x >= WIDTH-1 || pos.x <= 1) {
-            vel = flip_x(vel);
+        if(ball.pos.x >= WIDTH-1 || ball.pos.x <= 1) {
+            ball.vel = flip_x(ball.vel);
         }
-        if(pos.y >= HEIGHT-1 || pos.y <= 1) {
-            vel = flip_y(vel);
+        if(ball.pos.y >= HEIGHT-1 || ball.pos.y <= 1) {
+            ball.vel = flip_y(ball.vel);
         }
-        generate_frame(pos, last1, last2, height, guy1, guy2, &frame);
-        render_frame(&frame);
+        generate_frame(ball, guy1, guy2, &frame);
+        render_frame(ball, guy1, guy2, &frame);
         reset_cursor();
         usleep(1000 * 1000 / FPS);
     }

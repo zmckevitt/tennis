@@ -3,7 +3,7 @@
 
 #define HEIGHT 41
 #define WIDTH  64
-#define FPS    20
+#define FPS    60
 
 void disable_cursor(); 
 void enable_cursor(); 

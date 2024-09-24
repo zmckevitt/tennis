@@ -3,30 +3,30 @@
 
 #include <math.h>
 
-struct vec {
+typedef struct Vec {
     double x;
     double y;
-};
+} Vec;
 
 // Do we need a constructor?
-struct vec init_vec(float x, float y); 
+Vec init_vec(float x, float y); 
 
-struct vec vec_sum(struct vec v1, struct vec v2); 
+Vec vec_sum(Vec v1, Vec v2); 
 
-double vec_length(struct vec v); 
+double vec_length(Vec v); 
 
-struct vec flip_x(struct vec v); 
+Vec flip_x(Vec v); 
 
-struct vec flip_y(struct vec v); 
+Vec flip_y(Vec v); 
 
-struct vec flip(struct vec v);
+Vec flip(Vec v);
 
-struct vec v_diff(struct vec v1, struct vec v2); 
+Vec v_diff(Vec v1, Vec v2); 
 
-struct vec scale(struct vec v, float sf); 
+Vec scale(Vec v, float sf); 
 
 // Implement after getting floating point vectors working....
-struct vec norm(struct vec v);
+Vec norm(Vec v);
 
 // Transform function?
 

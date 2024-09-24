@@ -1,7 +1,7 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#define HEIGHT 40
+#define HEIGHT 41
 #define WIDTH  64
 #define FPS    20
 

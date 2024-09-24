@@ -9,6 +9,7 @@
 void sigint_handler(int signum) {
     // move down height lines
     printf("\x1b[%dB", HEIGHT);
+    // reenable the cursor
     enable_cursor();
     fflush(stdout);
     exit(1);
@@ -19,6 +20,9 @@ typedef struct Frame {
     size_t width;
     size_t height;
     char buf[WIDTH][HEIGHT];
+    struct vec ball;
+    struct vec guy1;
+    struct vec guy2;
 } Frame;
 
 Frame init_frame() {
@@ -31,9 +35,11 @@ Frame init_frame() {
 
 // draws picture with character at position
 int generate_frame(struct vec pos, int last1, int last2, int ballheight, struct vec guy1, struct vec guy2, Frame *frame) {
-
     size_t width = frame->width;
     size_t height = frame->height;
+    
+    frame->guy1 = guy1;
+    frame->guy2 = guy2;
 
     int posx = (int)pos.x;
     int posy = (int)pos.y;
@@ -74,6 +80,8 @@ int generate_frame(struct vec pos, int last1, int last2, int ballheight, struct 
                     else {
                         frame->buf[x][y] = '@';
                     }
+                    frame->ball.x = x;
+                    frame->ball.y = y;
                 }
             }
             if(guy1.x == x && guy1.y == y) {
@@ -100,13 +108,36 @@ int generate_frame(struct vec pos, int last1, int last2, int ballheight, struct 
 void render_frame(Frame *frame) {
     for(int y=0; y<frame->height; y++) {
         char row[frame->width];
+        // 16 bit color
+        // printf("\x1b[42m");
+        // 256 bit color
+        printf("\x1b[48;5;28m");
         for(int x=0; x<frame->width; x++) {
-            // fputc(frame->buf[x][y], stdout);
-            row[x] = frame->buf[x][y];
+            if(x == frame->ball.x && y == frame->ball.y) {
+                // 256 bit colors
+                printf("\x1b[38;5;220m");
+                fputc(frame->buf[x][y], stdout);
+                printf("\x1b[0m");
+                printf("\x1b[48;5;28m");
+            // make player background white with black "racket"
+            // } else if ((x == frame->guy1.x && y == frame->guy1.y) ||
+            //            (x == frame->guy2.x && y == frame->guy2.y)) {
+            //     printf("\x1b[38;5;0m");
+            //     printf("\x1b[48;5;255m");
+            //     fputc(frame->buf[x][y], stdout);
+            //     printf("\x1b[0m");
+            //     printf("\x1b[48;5;28m");
+            } else {
+                fputc(frame->buf[x][y], stdout);
+            }
+            //row[x] = frame->buf[x][y];
         }
-        fwrite(row, frame->width, 1, stdout);
+        //fwrite(row, frame->width, 1, stdout);
+        printf("\x1b[0m");
         fputc('\n', stdout);
     }
+    // If we disable flushing on newlines
+    // fflush(stdout);
 }
 
 // Ideas:
@@ -117,6 +148,9 @@ void render_frame(Frame *frame) {
 //  Make draw() args into a struct 
 //  Implement floating point vectors
 int main(int argc, char** argv) {
+    // Dont flush stdout every newline
+    // https://stackoverflow.com/questions/40227807/how-can-i-print-a-string-with-newline-without-flushing-the-buffer
+    // setvbuf(stdout, NULL, _IOFBF, 0);
 
     // Disable cursor and reenable on exit
     struct sigaction newaction;

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <signal.h>
 #include <stdint.h>
 #include <sys/select.h>
@@ -48,7 +49,7 @@ typedef struct GameState {
     GameObj guy1;
     GameObj guy2;
     GameObj ball;
-    uint64_t tick;
+    int courtcolor;
     
 } GameState;
 
@@ -122,26 +123,28 @@ void render_frame(Frame *frame) {
     GameObj guy2 = gamestate.guy2;
     GameObj ball = gamestate.ball;
 
+    int court = gamestate.courtcolor;
+
     for(int y=0; y<HEIGHT; y++) {
-        BG_COLOR(GREEN);
+        BG_COLOR(court);
         for(int x=0; x<WIDTH; x++) {
             if(x == ball.pos.x && y == ball.pos.y) {
                 // 256 bit colors
                 FG_COLOR(YELLOW);
                 fputc((*frame)[x][y], stdout);
                 RESET_COLOR;
-                BG_COLOR(GREEN);
+                BG_COLOR(court);
             // make player background white with colored "racket"
             } else if (x == guy1.pos.x && y == guy1.pos.y) {
                 FG_BG_COLOR(RED, WHITE);
                 fputc((*frame)[x][y], stdout);
                 RESET_COLOR;
-                BG_COLOR(GREEN);
+                BG_COLOR(court);
             } else if (x == guy2.pos.x && y == guy2.pos.y) {
                 FG_BG_COLOR(BLUE, WHITE);
                 fputc((*frame)[x][y], stdout);
                 RESET_COLOR;
-                BG_COLOR(GREEN);
+                BG_COLOR(court);
             } else {
                 fputc((*frame)[x][y], stdout);
             }
@@ -343,6 +346,20 @@ void sigint_handler(int signum) {
 }
 
 int main(int argc, char** argv) {
+    // determine court color, default green
+    gamestate.courtcolor = GREEN;
+    if(argc > 1) {
+        if(strcmp(argv[1], "grass") == 0) {
+            gamestate.courtcolor = GREEN;
+        }
+        if(strcmp(argv[1], "clay") == 0) {
+            gamestate.courtcolor = ORANGE;
+        }
+        if(strcmp(argv[1], "court") == 0) {
+            gamestate.courtcolor = INDOOR; // court blue
+        }
+    }
+
     // Disable cursor and reenable on exit
     struct sigaction newaction;
     newaction.sa_handler = sigint_handler;

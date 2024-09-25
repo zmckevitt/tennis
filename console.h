@@ -6,6 +6,8 @@
 #define FPS    30
 
 #define GREEN  28
+#define ORANGE 202
+#define INDOOR 26 
 #define YELLOW 220
 #define RED    196
 #define BLUE   27

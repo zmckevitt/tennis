@@ -22,17 +22,25 @@ typedef char Frame[WIDTH][HEIGHT];
 
 static Frame frame;
 
+enum Action {
+    STRAIGHT = 0,
+    LEFT = 1,
+    RIGHT = 2,
+};
+
 typedef struct GameObj {
     Vec pos;
     Vec vel;
     char c;
+    int action;
 } GameObj;
 
 GameObj init_gameobj(Vec pos, Vec vel, char c) {
     GameObj gameobj = {
         .pos = pos,
         .vel = vel,
-        .c = c
+        .c = c,
+        .action = STRAIGHT
     };
     return gameobj;
 }
@@ -115,6 +123,25 @@ void generate_frame(Frame *frame) {
 
     (*frame)[guy1x][guy1y] = guy1.c;
     (*frame)[guy2x][guy2y] = guy2.c;
+
+    if(guy1.action == LEFT && guy1x > 0) {
+        (*frame)[guy1x-1][guy1y] = '<';
+    }
+    if(guy1.action == RIGHT && guy1x < WIDTH-1) {
+        (*frame)[guy1x+1][guy1y] = '>';
+    }
+    if(guy1.action == STRAIGHT) {
+        (*frame)[guy1x][guy1y+1] = 'v';
+    }
+    if(guy2.action == LEFT && guy2x > 0) {
+        (*frame)[guy2x-1][guy2y] = '<';
+    }
+    if(guy2.action == RIGHT && guy2x < WIDTH-1) {
+        (*frame)[guy2x+1][guy2y] = '>';
+    }
+    if(guy2.action == STRAIGHT) {
+        (*frame)[guy2x][guy2y-1] = '^';
+    }
 }
 
 void render_frame(Frame *frame) {
@@ -160,8 +187,9 @@ void* game(void* vargs) {
     // Guys dont have velocity yet
     int x = 15;
     int y = 4;
-    GameObj guy1 = init_gameobj(init_vec(x,y,0), init_vec(0,0,0), '/');
-    GameObj guy2 = init_gameobj(init_vec(WIDTH-x-1, HEIGHT-y-1,0), init_vec(0,0,0), '\\');
+    // TODO : input character for firstname?
+    GameObj guy1 = init_gameobj(init_vec(x,y,0), init_vec(0,0,0), '1');
+    GameObj guy2 = init_gameobj(init_vec(WIDTH-x-1, HEIGHT-y-1,0), init_vec(0,0,0), '2');
 
     // Vector from guy1 to guy2
     Vec diff = v_diff(guy1.pos, guy2.pos);
@@ -208,17 +236,32 @@ void* game(void* vargs) {
         if(gs->ball.pos.y < 4*diff.y/6 + y && gs->ball.pos.y >= 3*diff.y/6 + y) {
             gs->ball.pos.z = 2;
         }
-        if(collision(gs->guy1, gs->ball, 2) || collision(gs->guy2, gs->ball, 2)) {
-            gs->ball.vel = flip_xy(gs->ball.vel);
-            if(gs->guy1.c == '/') {
-                gs->guy1.c = '\\';
-            } else {
-                gs->guy1.c = '/';
+        if(collision(gs->guy1, gs->ball, 2)) {
+            if(gs->guy1.action == STRAIGHT) {
+                gs->ball.vel.x = 0;
+                gs->ball.vel.y = 1;
             }
-            if(gs->guy2.c == '/') {
-                gs->guy2.c = '\\';
-            } else {
-                gs->guy2.c = '/';
+            if(gs->guy1.action == LEFT) {
+                gs->ball.vel.x = -1;
+                gs->ball.vel.y = 1;
+            }
+            if(gs->guy1.action == RIGHT) {
+                gs->ball.vel.x = 1;
+                gs->ball.vel.y = 1;
+            }
+        }
+        if(collision(gs->guy2, gs->ball, 2)) {
+            if(gs->guy2.action == STRAIGHT) {
+                gs->ball.vel.x = 0;
+                gs->ball.vel.y = -1;
+            }
+            if(gs->guy2.action == LEFT) {
+                gs->ball.vel.x = -1;
+                gs->ball.vel.y = -1;
+            }
+            if(gs->guy2.action == RIGHT) {
+                gs->ball.vel.x = 1;
+                gs->ball.vel.y = -1;
             }
         }
         if(gs->ball.pos.x >= WIDTH-1 || gs->ball.pos.x <= 1) {
@@ -287,24 +330,48 @@ void* controller(void* vargs) {
         i=kbhit();
         if(i != 0) {
             c = fgetc(stdin);
-            if(c == 'a') {
+            switch(c) {
+            // guy1
+            case 'a':
                 guy1->vel.x = -1; 
-            }
-            if(c == 'd') {
+                break;
+            case 'd':
                 guy1->vel.x = 1;
-            }
-            if(c == 's') {
+                break;
+            case 's':
                 guy1->vel.x = 0;
-            }
-            if(c == 'j') {
+                break;
+            case 'q':
+                guy1->action = LEFT;
+                break;
+            case 'w':
+                guy1->action = STRAIGHT;
+                break;
+            case 'e':
+                guy1->action = RIGHT;
+                break;
+            // guy2
+            case 'j':
                 guy2->vel.x = -1; 
-            }
-            if(c == 'l') {
+                break;
+            case 'l':
                 guy2->vel.x = 1;
-            }
-            if(c == 'k') {
+                break;
+            case 'k':
                 guy2->vel.x = 0;
+                break;
+            case 'u':
+                guy2->action = LEFT;
+                break;
+            case 'i':
+                guy2->action = STRAIGHT;
+                break;
+            case 'o':
+                guy2->action = RIGHT;
+                break;
+            default:
             }
+            
         }
         else {
             // guy->vel.x = 0;

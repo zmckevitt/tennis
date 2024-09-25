@@ -1,10 +1,14 @@
 CC=gcc
 
+#ifdef __APPLE__
+CC=/usr/local/bin/gcc-14
+#endif
+
 # Source and object files
 SOURCES=$(wildcard *.c)
 OBJECTS=$(patsubst %.c, %.o, $(SOURCES))
 
-LIBS=-lm
+LIBS=-lm -lpthread
 
 all: tennis
 
@@ -12,7 +16,7 @@ tennis: $(OBJECTS)
 	$(CC) $(OBJECTS) -o tennis $(LIBS)
 
 %.o: %.c
-	$(CC) -c $< -o $@
+	$(CC) -c $< -o $@ $(LIBS)
 
 .PHONY: clean
 clean:

@@ -14,11 +14,10 @@
 
 // pthreads for game and controller for both players
 pthread_t gtid, ctid;
+pthread_mutex_t framelock;
+pthread_mutex_t statelock;
 
 typedef char Frame[WIDTH][HEIGHT];
-
-// No clue how big this should be
-// static Frame framebuffer[64];
 
 static Frame frame;
 
@@ -63,41 +62,45 @@ typedef struct GameState {
 
 static GameState gamestate;
 
-void draw_field(Frame* frame) {
+void draw_field() {
     size_t width = WIDTH;
     size_t height = HEIGHT;
     
     int scalex = width/8;
     int quit = 0;
+    pthread_mutex_lock(&framelock);
     for(int y=0; y<height; ++y) {
         for(int x=0; x<width; ++x) {
             if(x == 0 || y == 0 || x == width - 1 || y == height -1) {
-                (*frame)[x][y] = '#';
+                frame[x][y] = '#';
             }
             else if(y==height/2) {
-                (*frame)[x][y] = '=';
+                frame[x][y] = '=';
             }
             else if ((x == width/2 - 1 || x == width/2) && (y > height/2 - height/4 && y < height/2 + height/4)) {
-                (*frame)[x][y] = '|';
+                frame[x][y] = '|';
             }
             else if (x == scalex || x == width - scalex -1) {
-                (*frame)[x][y] = '|';
+                frame[x][y] = '|';
             }
             else if ((y == height/2 - height/4 || y == height/2 + height/4) && (x < width - scalex -1 && x > scalex)) {
-                (*frame)[x][y] = '-';
+                frame[x][y] = '-';
             }
             else {
-                (*frame)[x][y] = ' ';
+                frame[x][y] = ' ';
             }
         }
     }
+    pthread_mutex_unlock(&framelock);
 }
 
 // draws picture with character at position
-void generate_frame(Frame *frame) {
+void generate_frame() {
+    pthread_mutex_lock(&statelock);
     GameObj guy1 = gamestate.guy1;
     GameObj guy2 = gamestate.guy2;
     GameObj ball = gamestate.ball;
+    pthread_mutex_unlock(&statelock);
     
     int ballx = (int)ball.pos.x;
     int bally = (int)ball.pos.y;
@@ -109,81 +112,88 @@ void generate_frame(Frame *frame) {
     int guy2x = (int)guy2.pos.x;
     int guy2y = (int)guy2.pos.y;
 
-    draw_field(frame);
+    draw_field();
 
+    pthread_mutex_lock(&framelock);
     if(ballz == 0) {
-        (*frame)[ballx][bally] = '.';
+        frame[ballx][bally] = '.';
     }
     else if (ballz == 1) {
-        (*frame)[ballx][bally] = '*';
+        frame[ballx][bally] = '*';
     }
     else {
-        (*frame)[ballx][bally] = '@';
+        frame[ballx][bally] = '@';
     }
 
-    (*frame)[guy1x][guy1y] = guy1.c;
-    (*frame)[guy2x][guy2y] = guy2.c;
+    frame[guy1x][guy1y] = guy1.c;
+    frame[guy2x][guy2y] = guy2.c;
 
     if(guy1.action == LEFT && guy1x > 0) {
-        (*frame)[guy1x-1][guy1y] = '<';
+        frame[guy1x-1][guy1y] = '<';
     }
     if(guy1.action == RIGHT && guy1x < WIDTH-1) {
-        (*frame)[guy1x+1][guy1y] = '>';
+        frame[guy1x+1][guy1y] = '>';
     }
     if(guy1.action == STRAIGHT) {
-        (*frame)[guy1x][guy1y+1] = 'v';
+        frame[guy1x][guy1y+1] = 'v';
     }
     if(guy2.action == LEFT && guy2x > 0) {
-        (*frame)[guy2x-1][guy2y] = '<';
+        frame[guy2x-1][guy2y] = '<';
     }
     if(guy2.action == RIGHT && guy2x < WIDTH-1) {
-        (*frame)[guy2x+1][guy2y] = '>';
+        frame[guy2x+1][guy2y] = '>';
     }
     if(guy2.action == STRAIGHT) {
-        (*frame)[guy2x][guy2y-1] = '^';
+        frame[guy2x][guy2y-1] = '^';
+
     }
+    pthread_mutex_unlock(&framelock);
 }
 
-void render_frame(Frame *frame) {
+void render_frame() {
 
-    GameObj guy1 = gamestate.guy1;
-    GameObj guy2 = gamestate.guy2;
-    GameObj ball = gamestate.ball;
-
+    pthread_mutex_lock(&statelock);
     int court = gamestate.courtcolor;
+    int guy1x = (int)(gamestate.guy1.pos.x);
+    int guy1y = (int)(gamestate.guy1.pos.y);
+    int guy2x = (int)(gamestate.guy2.pos.x);
+    int guy2y = (int)(gamestate.guy2.pos.y);
+    int ballx = (int)(gamestate.ball.pos.x);
+    int bally = (int)(gamestate.ball.pos.y);
+    pthread_mutex_unlock(&statelock);
 
+    pthread_mutex_lock(&framelock);
     for(int y=0; y<HEIGHT; y++) {
         BG_COLOR(court);
         for(int x=0; x<WIDTH; x++) {
-            if(x == ball.pos.x && y == ball.pos.y) {
+            if(x == ballx && y == bally) {
                 // 256 bit colors
                 FG_COLOR(YELLOW);
-                fputc((*frame)[x][y], stdout);
+                fputc(frame[x][y], stdout);
                 RESET_COLOR;
                 BG_COLOR(court);
             // make player background white with colored "racket"
-            } else if (x == guy1.pos.x && y == guy1.pos.y) {
+            } else if (x == guy1x && y == guy1y) {
                 FG_BG_COLOR(RED, WHITE);
-                fputc((*frame)[x][y], stdout);
+                fputc(frame[x][y], stdout);
                 RESET_COLOR;
                 BG_COLOR(court);
-            } else if (x == guy2.pos.x && y == guy2.pos.y) {
+            } else if (x == guy2x && y == guy2y) {
                 FG_BG_COLOR(BLUE, WHITE);
-                fputc((*frame)[x][y], stdout);
+                fputc(frame[x][y], stdout);
                 RESET_COLOR;
                 BG_COLOR(court);
             } else {
-                fputc((*frame)[x][y], stdout);
+                fputc(frame[x][y], stdout);
             }
         }
         RESET_COLOR;
         fputc('\n', stdout);
     }
+    pthread_mutex_unlock(&framelock);
 }
 
 void* game(void* vargs) {
-    Frame frame;
-    
     // Guys dont have velocity yet
     int x = 15;
     int y = 4;
@@ -196,16 +206,18 @@ void* game(void* vargs) {
 
     // Start ball with guy1
     // Initial velocity is normalized in the direction of guy2
-    GameObj ball = init_gameobj(guy1.pos, init_vec(1,1,0), '.');
+    GameObj ball = init_gameobj(guy1.pos, init_vec(0.5,0.5,0), '.');
 
     GameState* gs = &gamestate;
 
+    pthread_mutex_lock(&statelock);
     gs->guy1 = guy1;
     gs->guy2 = guy2;
     gs->ball = ball;
+    pthread_mutex_unlock(&statelock);
 
     while(1) {
-
+        pthread_mutex_lock(&statelock);
         gs->ball.pos = vec_sum(gs->ball.pos, gs->ball.vel);
         gs->guy1.pos = vec_sum(gs->guy1.pos, gs->guy1.vel);
         gs->guy2.pos = vec_sum(gs->guy2.pos, gs->guy2.vel);
@@ -239,29 +251,29 @@ void* game(void* vargs) {
         if(collision(gs->guy1, gs->ball, 2)) {
             if(gs->guy1.action == STRAIGHT) {
                 gs->ball.vel.x = 0;
-                gs->ball.vel.y = 1;
+                gs->ball.vel.y = 0.5;
             }
             if(gs->guy1.action == LEFT) {
-                gs->ball.vel.x = -1;
-                gs->ball.vel.y = 1;
+                gs->ball.vel.x = -0.5;
+                gs->ball.vel.y = 0.5;
             }
             if(gs->guy1.action == RIGHT) {
-                gs->ball.vel.x = 1;
-                gs->ball.vel.y = 1;
+                gs->ball.vel.x = 0.5;
+                gs->ball.vel.y = 0.5;
             }
         }
         if(collision(gs->guy2, gs->ball, 2)) {
             if(gs->guy2.action == STRAIGHT) {
                 gs->ball.vel.x = 0;
-                gs->ball.vel.y = -1;
+                gs->ball.vel.y = -0.5;
             }
             if(gs->guy2.action == LEFT) {
-                gs->ball.vel.x = -1;
-                gs->ball.vel.y = -1;
+                gs->ball.vel.x = -0.5;
+                gs->ball.vel.y = -0.5;
             }
             if(gs->guy2.action == RIGHT) {
-                gs->ball.vel.x = 1;
-                gs->ball.vel.y = -1;
+                gs->ball.vel.x = 0.5;
+                gs->ball.vel.y = -0.5;
             }
         }
         if(gs->ball.pos.x >= WIDTH-1 || gs->ball.pos.x <= 1) {
@@ -270,9 +282,9 @@ void* game(void* vargs) {
         if(gs->ball.pos.y >= HEIGHT-1 || gs->ball.pos.y <= 1) {
             gs->ball.vel = flip_y(gs->ball.vel);
         }
-
-        generate_frame(&frame);
-        render_frame(&frame);
+        pthread_mutex_unlock(&statelock);
+        generate_frame();
+        render_frame();
         CURSOR_TOP; 
         usleep(1000 * 1000 / FPS);
     }
@@ -330,21 +342,22 @@ void* controller(void* vargs) {
         i=kbhit();
         if(i != 0) {
             c = fgetc(stdin);
+            pthread_mutex_lock(&statelock);
             switch(c) {
             // guy1
             case 'a':
-                guy1->vel.x = -1; 
+                guy1->vel.x = -0.5; 
                 break;
             case 'd':
-                guy1->vel.x = 1;
+                guy1->vel.x = 0.5;
                 break;
-            case 's':
+            case 'w':
                 guy1->vel.x = 0;
                 break;
             case 'q':
                 guy1->action = LEFT;
                 break;
-            case 'w':
+            case 's':
                 guy1->action = STRAIGHT;
                 break;
             case 'e':
@@ -352,10 +365,10 @@ void* controller(void* vargs) {
                 break;
             // guy2
             case 'j':
-                guy2->vel.x = -1; 
+                guy2->vel.x = -0.5; 
                 break;
             case 'l':
-                guy2->vel.x = 1;
+                guy2->vel.x = 0.5;
                 break;
             case 'k':
                 guy2->vel.x = 0;
@@ -371,7 +384,7 @@ void* controller(void* vargs) {
                 break;
             default:
             }
-            
+            pthread_mutex_unlock(&statelock);
         }
         else {
             // guy->vel.x = 0;
@@ -406,6 +419,9 @@ void sigint_handler(int signum) {
     pthread_kill(gtid, 0);
     pthread_kill(ctid, 0);
 
+    pthread_mutex_destroy(&framelock);
+    pthread_mutex_destroy(&statelock);
+
     enable_stdin_echo();
 
     fflush(stdout);
@@ -413,6 +429,10 @@ void sigint_handler(int signum) {
 }
 
 int main(int argc, char** argv) {
+
+    pthread_mutex_init(&framelock, NULL);
+    pthread_mutex_init(&statelock, NULL);
+
     // determine court color, default green
     gamestate.courtcolor = GREEN;
     if(argc > 1) {

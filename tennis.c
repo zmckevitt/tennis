@@ -3,22 +3,23 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdint.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <termios.h>
+#include <pthread.h>
 
 #include "console.h"
 #include "linalg.h"
 
-void sigint_handler(int signum) {
-    // move down height lines
-    CURSOR_DOWN(HEIGHT);
-    ENABLE_CURSOR;
-    fflush(stdout);
-    exit(1);
-}
+// pthreads for game and controller for both players
+pthread_t gtid, ctid;
 
 typedef char Frame[WIDTH][HEIGHT];
 
 // No clue how big this should be
-static Frame framebuffer[64];
+// static Frame framebuffer[64];
+
+static Frame frame;
 
 typedef struct GameObj {
     Vec pos;
@@ -51,6 +52,8 @@ typedef struct GameState {
     
 } GameState;
 
+static GameState gamestate;
+
 void draw_field(Frame* frame) {
     size_t width = WIDTH;
     size_t height = HEIGHT;
@@ -82,10 +85,11 @@ void draw_field(Frame* frame) {
 }
 
 // draws picture with character at position
-void generate_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
-    size_t width = WIDTH;
-    size_t height = HEIGHT;
-
+void generate_frame(Frame *frame) {
+    GameObj guy1 = gamestate.guy1;
+    GameObj guy2 = gamestate.guy2;
+    GameObj ball = gamestate.ball;
+    
     int ballx = (int)ball.pos.x;
     int bally = (int)ball.pos.y;
     int ballz = (int)ball.pos.z; // ( ͡° ͜ʖ ͡°)
@@ -112,7 +116,12 @@ void generate_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
     (*frame)[guy2x][guy2y] = guy2.c;
 }
 
-void render_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
+void render_frame(Frame *frame) {
+
+    GameObj guy1 = gamestate.guy1;
+    GameObj guy2 = gamestate.guy2;
+    GameObj ball = gamestate.ball;
+
     for(int y=0; y<HEIGHT; y++) {
         BG_COLOR(GREEN);
         for(int x=0; x<WIDTH; x++) {
@@ -137,20 +146,12 @@ void render_frame(GameObj ball, GameObj guy1, GameObj guy2, Frame *frame) {
                 fputc((*frame)[x][y], stdout);
             }
         }
-        printf("\x1b[0m");
+        RESET_COLOR;
         fputc('\n', stdout);
     }
 }
 
-int main(int argc, char** argv) {
-
-    // Disable cursor and reenable on exit
-    struct sigaction newaction;
-    newaction.sa_handler = sigint_handler;
-    sigaction(SIGINT, &newaction, NULL);
-
-    DISABLE_CURSOR; 
-
+void* game(void* vargs) {
     Frame frame;
     
     // Guys dont have velocity yet
@@ -164,43 +165,199 @@ int main(int argc, char** argv) {
 
     // Start ball with guy1
     // Initial velocity is normalized in the direction of guy2
-    GameObj ball = init_gameobj(guy1.pos, norm(diff), '.');
+    GameObj ball = init_gameobj(guy1.pos, init_vec(1,1,0), '.');
+
+    GameState* gs = &gamestate;
+
+    gs->guy1 = guy1;
+    gs->guy2 = guy2;
+    gs->ball = ball;
 
     while(1) {
-        ball.pos = vec_sum(ball.pos, ball.vel);
-        if(ball.pos.y < diff.y/6 + y || (ball.pos.y < diff.y + y && ball.pos.y >= (5 * diff.y / 6) + y)){
-            ball.pos.z = 0;
+
+        gs->ball.pos = vec_sum(gs->ball.pos, gs->ball.vel);
+        gs->guy1.pos = vec_sum(gs->guy1.pos, gs->guy1.vel);
+        gs->guy2.pos = vec_sum(gs->guy2.pos, gs->guy2.vel);
+        if(gs->guy1.pos.x >= WIDTH) {
+            gs->guy1.vel.x = 0;
+            gs->guy1.pos.x = WIDTH-1;
         }
-        if((ball.pos.y < 2* diff.y/6 + y && ball.pos.y >= diff.y/6 + y) || 
-           (ball.pos.y >= 4 * diff.y/6 + y && ball.pos.y < 5*diff.y/6 + y )) {
-            ball.pos.z = 1;
+        if(gs->guy1.pos.x <= 0) {
+            gs->guy1.vel.x = 0;
+            gs->guy1.pos.x = 0;
         }
-        if(ball.pos.y < 4*diff.y/6 + y && ball.pos.y >= 3*diff.y/6 + y) {
-            ball.pos.z = 2;
+        if(gs->guy2.pos.x >= WIDTH) {
+            gs->guy2.vel.x = 0;
+            gs->guy2.pos.x = WIDTH-1;
         }
-        if(collision(guy1, ball, 2) || collision(guy2, ball, 2)) {
-            ball.vel = flip_xy(ball.vel);
-            if(guy1.c == '/') {
-                guy1.c = '\\';
+        if(gs->guy2.pos.x <= 0) {
+            gs->guy2.vel.x = 0;
+            gs->guy2.pos.x = 0;
+        }
+        if(gs->ball.pos.y < diff.y/6 + y || 
+          (gs->ball.pos.y < diff.y + y && gs->ball.pos.y >= (5 * diff.y / 6) + y)){
+            gs->ball.pos.z = 0;
+        }
+        if((gs->ball.pos.y < 2* diff.y/6 + y && gs->ball.pos.y >= diff.y/6 + y) || 
+           (gs->ball.pos.y >= 4 * diff.y/6 + y && gs->ball.pos.y < 5*diff.y/6 + y )) {
+            gs->ball.pos.z = 1;
+        }
+        if(gs->ball.pos.y < 4*diff.y/6 + y && gs->ball.pos.y >= 3*diff.y/6 + y) {
+            gs->ball.pos.z = 2;
+        }
+        if(collision(gs->guy1, gs->ball, 2) || collision(gs->guy2, gs->ball, 2)) {
+            gs->ball.vel = flip_xy(gs->ball.vel);
+            if(gs->guy1.c == '/') {
+                gs->guy1.c = '\\';
             } else {
-                guy1.c = '/';
+                gs->guy1.c = '/';
             }
-            if(guy2.c == '/') {
-                guy2.c = '\\';
+            if(gs->guy2.c == '/') {
+                gs->guy2.c = '\\';
             } else {
-                guy2.c = '/';
+                gs->guy2.c = '/';
             }
         }
-        if(ball.pos.x >= WIDTH-1 || ball.pos.x <= 1) {
-            ball.vel = flip_x(ball.vel);
+        if(gs->ball.pos.x >= WIDTH-1 || gs->ball.pos.x <= 1) {
+            gs->ball.vel = flip_x(gs->ball.vel);
         }
-        if(ball.pos.y >= HEIGHT-1 || ball.pos.y <= 1) {
-            ball.vel = flip_y(ball.vel);
+        if(gs->ball.pos.y >= HEIGHT-1 || gs->ball.pos.y <= 1) {
+            gs->ball.vel = flip_y(gs->ball.vel);
         }
-        generate_frame(ball, guy1, guy2, &frame);
-        render_frame(ball, guy1, guy2, &frame);
+
+        generate_frame(&frame);
+        render_frame(&frame);
         CURSOR_TOP; 
         usleep(1000 * 1000 / FPS);
     }
-    return 0;
+}
+
+// Some deep lore in avoiding ncurses
+// https://web.archive.org/web/20180401093525/http://cc.byexamples.com/2007/04/08/non-blocking-user-input-in-loop-without-ncurses/
+// https://stackoverflow.com/questions/20349585/c-library-function-to-check-the-keypress-from-keyboard-in-linux
+// https://stackoverflow.com/questions/21903495/how-to-print-a-variable-continuously-in-a-loop-and-terminate-with-a-hit-of-escap
+#define NB_ENABLE 1
+#define NB_DISABLE 0
+
+int kbhit() {
+    struct timeval tv;
+    fd_set fds;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+    return FD_ISSET(STDIN_FILENO, &fds);
+}
+
+void nonblock(int state) {
+    struct termios ttystate;
+    
+    // get terminal state
+    tcgetattr(STDIN_FILENO, &ttystate);
+
+    if(state == NB_ENABLE) {
+        // turn off canonical mode
+        ttystate.c_lflag &= ~ICANON;
+        // minimum number of input read
+        ttystate.c_cc[VMIN] = 1;
+    }
+    else if(state == NB_DISABLE) {
+        // turn on canonical mode
+        ttystate.c_lflag |= ICANON;
+    }
+    // set the terminal attributes
+    tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+}
+
+// Expects vargs to be (int*)
+void* controller(void* vargs) {
+    char c;
+
+    GameObj* guy1 = &gamestate.guy1;
+    GameObj* guy2 = &gamestate.guy2;
+
+    int i=0;
+    nonblock(NB_ENABLE);
+    while(1) {
+        usleep(1);
+        i=kbhit();
+        if(i != 0) {
+            c = fgetc(stdin);
+            if(c == 'a') {
+                guy1->vel.x = -1; 
+            }
+            if(c == 'd') {
+                guy1->vel.x = 1;
+            }
+            if(c == 's') {
+                guy1->vel.x = 0;
+            }
+            if(c == 'j') {
+                guy2->vel.x = -1; 
+            }
+            if(c == 'l') {
+                guy2->vel.x = 1;
+            }
+            if(c == 'k') {
+                guy2->vel.x = 0;
+            }
+        }
+        else {
+            // guy->vel.x = 0;
+            // guy->vel.y = 0;
+        }
+    }
+}
+// end of deep lore in avoiding ncurses
+
+void disable_stdin_echo() {
+    struct termios term;
+    tcgetattr(fileno(stdin), &term);
+
+    term.c_lflag &= ~ECHO;
+    tcsetattr(fileno(stdin), 0, &term);
+}
+
+void enable_stdin_echo() {
+    struct termios term;
+    tcgetattr(fileno(stdin), &term);
+
+    term.c_lflag |= ECHO;
+    tcsetattr(fileno(stdin), 0, &term);
+}
+
+void sigint_handler(int signum) {
+    // move down height lines
+    CURSOR_DOWN(HEIGHT);
+    ENABLE_CURSOR;
+
+    // kill game and controller pthreads
+    pthread_kill(gtid, 0);
+    pthread_kill(ctid, 0);
+
+    enable_stdin_echo();
+
+    fflush(stdout);
+    exit(1);
+}
+
+int main(int argc, char** argv) {
+    // Disable cursor and reenable on exit
+    struct sigaction newaction;
+    newaction.sa_handler = sigint_handler;
+    sigaction(SIGINT, &newaction, NULL);
+
+    DISABLE_CURSOR;
+
+    disable_stdin_echo();
+
+    pthread_create(&gtid, NULL, game, NULL);
+    pthread_create(&ctid, NULL, controller, NULL);
+
+    pthread_join(gtid, NULL);
+    pthread_join(ctid, NULL);
+    // unreachable
+    fprintf(stderr, "Unreachable!\n");
+    exit(1);
 }

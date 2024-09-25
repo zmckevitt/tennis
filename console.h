@@ -3,7 +3,7 @@
 
 #define HEIGHT 41
 #define WIDTH  64
-#define FPS    60
+#define FPS    30
 
 #define GREEN  28
 #define YELLOW 220
